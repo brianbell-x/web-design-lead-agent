@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>{% if workflow_state == 'running' %}scanning {{ source_label }}…{% else %}no leads pending{% endif %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..500;1,9..144,300..500&family=Crimson+Pro:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper:   #F2EBDB;
+    --paper-2: #ECE3CD;
+    --paper-3: #E2D8BE;
+    --ink:     #1C1814;
+    --ink-2:   #3A332B;
+    --ink-3:   #6B5F4F;
+    --rule:    rgba(28,24,20,.18);
+    --rule-2:  rgba(28,24,20,.32);
+    --warm:    #C9523C;
+    --moss:    #5B6A3A;
+    --mono:    "JetBrains Mono", ui-monospace, Menlo, monospace;
+    --serif:   "Fraunces", "Times New Roman", serif;
+    --body:    "Crimson Pro", Georgia, serif;
+    --mast-h:  44px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100vh; background: var(--paper); color: var(--ink); }
+  body {
+    font-family: var(--body);
+    -webkit-font-smoothing: antialiased;
+    display: flex; flex-direction: column;
+    isolation: isolate;
+    position: relative;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background-image:
+      radial-gradient(rgba(28,24,20,.05) 1px, transparent 1px),
+      radial-gradient(rgba(28,24,20,.04) 1px, transparent 1px);
+    background-size: 3px 3px, 7px 7px;
+    background-position: 0 0, 1px 2px;
+    mix-blend-mode: multiply; opacity: .55; z-index: 0;
+  }
+
+  /* ── masthead — matches approval.html ─────────────────────── */
+  .mast {
+    flex: 0 0 var(--mast-h);
+    display: flex; align-items: stretch;
+    border-bottom: 1px solid var(--rule-2);
+    position: relative; z-index: 3;
+    background: var(--paper);
+    transition: flex-basis .25s ease, opacity .2s ease, border-color .2s ease;
+    overflow: hidden;
+  }
+  /* during running, the runstate card is the single source of truth */
+  body.state-running .mast {
+    flex-basis: 0;
+    opacity: 0;
+    border-bottom-color: transparent;
+    pointer-events: none;
+  }
+  .pip-wrap {
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 16px;
+    border-right: 1px solid var(--rule-2);
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: .16em; text-transform: uppercase;
+    color: var(--ink);
+    flex-shrink: 0;
+  }
+  .pip-wrap .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--moss);
+    box-shadow: 0 0 0 0 rgba(91,106,58,.55);
+    animation: pulse-moss 1.6s ease-out infinite;
+    flex-shrink: 0;
+  }
+  .pip-wrap.idle  { color: var(--ink-3); }
+  .pip-wrap.idle  .dot { background: var(--ink-3); animation: none; box-shadow: none; }
+  .pip-wrap.error { color: var(--warm); }
+  .pip-wrap.error .dot { background: var(--warm); border-radius: 1px; animation: none; box-shadow: 0 0 0 3px rgba(201,82,60,.15); }
+  @keyframes pulse-moss {
+    0%   { box-shadow: 0 0 0 0 rgba(91,106,58,.55); }
+    70%  { box-shadow: 0 0 0 8px rgba(91,106,58,0); }
+    100% { box-shadow: 0 0 0 0 rgba(91,106,58,0); }
+  }
+
+  .ticker-slot {
+    flex: 1 1 auto; min-width: 0;
+    display: flex; align-items: center;
+    background: var(--paper-2);
+    position: relative;
+  }
+  .ticker {
+    position: relative; flex: 1; min-width: 0; height: 100%;
+    display: flex; align-items: center;
+    cursor: pointer; transition: background .15s;
+    border: 0; background: transparent;
+    color: inherit; text-align: left; font: inherit;
+    padding: 0;
+  }
+  .ticker:hover { background: var(--paper-3); }
+  .ticker .roll-window {
+    position: relative; width: 100%; height: 24px;
+    overflow: hidden; padding: 0 24px;
+  }
+  .ticker .roll {
+    position: absolute; left: 24px; right: 24px; top: 0; bottom: 0;
+    display: flex; align-items: center; gap: 14px;
+    white-space: nowrap;
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: .08em; color: var(--ink-2);
+    text-transform: uppercase;
+    animation: barrel-in .45s cubic-bezier(.5,0,.15,1) both;
+  }
+  .ticker .roll .ts { color: var(--ink-3); }
+  .ticker .roll b { color: var(--ink); font-weight: 500; letter-spacing: .04em; }
+  .ticker .roll .glyph { color: var(--warm); font-size: 9px; }
+  .ticker .roll .empty-roll { color: var(--ink-3); }
+  .ticker .hint {
+    position: absolute; right: 16px; top: 50%;
+    transform: translateY(-50%);
+    font-family: var(--mono); font-size: 9px;
+    letter-spacing: .18em; text-transform: uppercase;
+    color: var(--ink-3);
+    opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  .ticker:hover .hint { opacity: 1; }
+  @keyframes barrel-in {
+    0%   { transform: translateY(100%); opacity: 0; filter: blur(2px); }
+    60%  { opacity: 1; filter: blur(0); }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+
+  .mast-timer {
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 18px;
+    border-left: 1px solid var(--rule-2);
+    font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-3);
+    flex-shrink: 0;
+  }
+  .mast-timer b {
+    color: var(--ink); font-family: var(--serif); font-style: italic;
+    font-size: 16px; font-weight: 500; letter-spacing: -.005em;
+    text-transform: none; line-height: 1;
+    font-variation-settings: "opsz" 36;
+  }
+
+  /* ── hero ─────────────────────────────────────────────────── */
+  .hero {
+    flex: 1 1 auto; min-height: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    padding: clamp(40px, 8vh, 96px) clamp(20px, 5vw, 64px);
+    gap: clamp(20px, 3vh, 32px);
+    position: relative; z-index: 1;
+  }
+  .hero h1 {
+    font-family: var(--serif);
+    font-variation-settings: "opsz" 144;
+    font-weight: 400;
+    font-size: clamp(44px, 7.5vw, 84px);
+    line-height: .98; letter-spacing: -.025em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .hero .reason {
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: .22em; text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0;
+  }
+
+  /* ── log modal — mirrors approval.html ────────────────────── */
+  dialog.veil {
+    padding: 0; border: 0; background: transparent;
+    width: 100vw; height: 100vh; max-width: 100vw; max-height: 100vh;
+    overflow: hidden;
+  }
+  dialog.veil::backdrop { background: rgba(20,16,12,.78); backdrop-filter: blur(4px); }
+  dialog.veil .sheet {
+    width: 100%; height: 100%;
+    background: var(--paper);
+    padding: 24px;
+    display: flex; flex-direction: column;
+    box-shadow: 0 40px 80px rgba(0,0,0,.5);
+  }
+  @media (min-width: 900px) {
+    dialog.veil {
+      width: min(92vw, 1100px); height: min(86vh, 720px);
+      max-width: 92vw; max-height: 92vh;
+      border: 1px solid var(--ink);
+    }
+  }
+  dialog.veil .sheet .top {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding-bottom: 12px; border-bottom: 1px solid var(--rule-2);
+    margin-bottom: 14px;
+  }
+  dialog.veil .sheet .top .ttl {
+    font-family: var(--serif); font-style: italic;
+    font-size: 24px; font-weight: 500;
+    font-variation-settings: "opsz" 48;
+  }
+  dialog.veil .sheet .top .esc {
+    font-family: var(--mono); font-size: 10px;
+    letter-spacing: .16em; text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  dialog.veil .sheet .top .esc b {
+    color: var(--ink); background: var(--paper-3);
+    padding: 3px 7px; margin-right: 6px;
+  }
+  dialog.veil .sheet .body {
+    flex: 1; min-height: 0;
+    overflow-y: auto;
+    padding: 0;
+    border: 1px solid var(--rule-2);
+    background: var(--paper);
+  }
+  .log-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 12px 18px 10px;
+    border-bottom: 1px solid var(--rule-2);
+    font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .log-head b { color: var(--ink); font-weight: 500; }
+  .log-line {
+    display: grid; grid-template-columns: 84px 1fr;
+    gap: 18px; padding: 6px 18px;
+    font-family: var(--mono); font-size: 11.5px;
+    letter-spacing: .06em; color: var(--ink-2);
+    line-height: 1.5;
+    border-bottom: 1px dashed rgba(28,24,20,.10);
+  }
+  .log-line .ts { color: var(--ink-3); font-size: 10.5px; padding-top: 2px; letter-spacing: .10em; }
+  .log-line b { color: var(--ink); font-weight: 500; letter-spacing: .04em; }
+  .log-empty {
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-3);
+    padding: 40px 24px; text-align: center;
+  }
+
+  /* ── responsive ───────────────────────────────────────────── */
+  @media (max-width: 560px) {
+    .mast-timer { display: none; }
+    .ticker .roll-window { padding: 0 14px; }
+    .pip-wrap { padding: 0 12px; }
+    .hero { padding: 32px 18px; gap: 22px; }
+    .hero h1 { font-size: clamp(38px, 12vw, 56px); }
+  }
+</style>
+</head>
+<body class="state-{{ workflow_state }}">
+
+<header class="mast">
+  <div class="pip-wrap {{ 'idle' if workflow_state == 'idle' else ('error' if workflow_state == 'error' else '') }}">
+    <span class="dot"></span>
+    <span>{% if workflow_state == 'running' %}Live{% elif workflow_state == 'error' %}Error{% else %}Idle{% endif %}</span>
+  </div>
+
+  <div class="ticker-slot">
+    <button class="ticker" type="button" id="ticker-btn" title="Open pipeline log">
+      <div class="roll-window">
+        <div class="roll" id="ticker-roll">
+          {% if ticker_seed %}
+            {% set latest = ticker_seed[0] %}
+            <span class="glyph">▸</span>
+            <span class="ts">{{ latest.ts }}</span>
+            <b>{{ latest.line }}</b>
+          {% else %}
+            <span class="glyph">▸</span>
+            <span class="empty-roll">{% if workflow_state == 'running' %}awaiting pipeline events…{% else %}no recent activity{% endif %}</span>
+          {% endif %}
+        </div>
+      </div>
+      <span class="hint">▢ open log</span>
+    </button>
+  </div>
+
+  {% if workflow_state == 'running' %}
+    <div class="mast-timer">
+      <span>elapsed</span>
+      <b class="la-timer">{{ elapsed or '00:00:00' }}</b>
+    </div>
+  {% endif %}
+</header>
+
+<main class="hero">
+  {% if workflow_state == 'running' %}
+    <h1>Scanning {{ source_label }}.</h1>
+    <p class="reason">{{ reason }}</p>
+  {% else %}
+    <h1>Nothing pending.</h1>
+    <p class="reason">{{ reason }}</p>
+  {% endif %}
+
+  {% include "_runform.html" %}
+</main>
+
+<dialog class="veil" id="veil">
+  <div class="sheet">
+    <div class="top">
+      <div class="ttl">Pipeline log</div>
+      <div class="esc"><b>ESC</b> close</div>
+    </div>
+    <div class="body" id="log-body">
+      <div class="log-head">
+        <span><b id="log-count">{{ ticker_seed|length }}</b> event{{ '' if ticker_seed|length == 1 else 's' }}</span>
+        <span>{% if workflow_state == 'running' %}live · streaming · {% endif %}click outside or <b>esc</b> to close</span>
+      </div>
+      <div id="log-list">
+        {% for ev in ticker_seed %}
+          <div class="log-line">
+            <span class="ts">{{ ev.ts }}</span>
+            <span><b>{{ ev.line.split(' · ')[0] }}</b>{% if ' · ' in ev.line %}{{ ' · ' + ev.line.split(' · ', 1)[1] }}{% endif %}</span>
+          </div>
+        {% else %}
+          <div class="log-empty">no events yet</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<script>
+(function () {
+  var LOG = [
+    {% for ev in ticker_seed %}{ ts: {{ ev.ts|tojson }}, line: {{ ev.line|tojson }} }{% if not loop.last %},{% endif %}{% endfor %}
+  ];
+  // ticker_seed is newest-first; reverse so LOG is oldest-first like approval.html
+  LOG.reverse();
+
+  var rollEl = document.getElementById('ticker-roll');
+  function paintLatest() {
+    if (!rollEl) return;
+    if (!LOG.length) {
+      rollEl.innerHTML = '<span class="glyph">▸</span><span class="empty-roll">awaiting pipeline events…</span>';
+      return;
+    }
+    var e = LOG[LOG.length - 1];
+    rollEl.innerHTML = '';
+    var g = document.createElement('span'); g.className = 'glyph'; g.textContent = '▸';
+    var ts = document.createElement('span'); ts.className = 'ts'; ts.textContent = e.ts || '';
+    var b = document.createElement('b'); b.textContent = e.line || '';
+    rollEl.appendChild(g); rollEl.appendChild(ts); rollEl.appendChild(b);
+    rollEl.style.animation = 'none'; void rollEl.offsetWidth; rollEl.style.animation = '';
+  }
+
+  // ── runstate workbench (running state) ──────────────────────
+  // Derives the 4 stat counters, the "now" line, and the mini
+  // feed from the same LOG that drives the masthead ticker.
+  // Verb prefixes recognized (case-insensitive):
+  //   "lead list ready"        → seeds the run, not counted as a business
+  //   "captured screenshot"    → bumps `captured`
+  //   "flagged for redesign"   → bumps `flagged`
+  //   "mockup ready"           → bumps `mockups`
+  //   any other ... · target   → adds `target` to the unique business set
+  var rsPrev = { found: -1, captured: -1, flagged: -1, mockups: -1, now: '' };
+  var rsFeedSeen = 0;
+
+  function rsSplit(line) {
+    var parts = (line || '').split(' · ');
+    return { head: (parts[0] || '').trim(), rest: parts.slice(1).join(' · ').trim() };
+  }
+  function bumpStat(key, n) {
+    var el = document.getElementById('stat-' + key);
+    if (!el) return;
+    var prev = rsPrev[key];
+    el.textContent = n;
+    if (n > prev && prev !== -1) {
+      var card = el.closest('.rs-stat');
+      if (card) {
+        card.classList.add('is-tick');
+        clearTimeout(card._t);
+        card._t = setTimeout(function () { card.classList.remove('is-tick'); }, 420);
+      }
+    }
+    rsPrev[key] = n;
+  }
+  function paintRunstate() {
+    var nowLine = document.getElementById('rs-now-line');
+    if (!nowLine) return; // not in running state
+    var found = new Set();
+    var captured = 0, flagged = 0, mockups = 0;
+    var latest = null;
+    for (var i = 0; i < LOG.length; i++) {
+      var e = LOG[i];
+      var s = rsSplit(e.line);
+      var head = s.head.toLowerCase();
+      if (head.indexOf('captured screenshot') === 0) captured++;
+      else if (head.indexOf('flagged') === 0) flagged++;
+      else if (head.indexOf('mockup ready') === 0) mockups++;
+      if (head.indexOf('lead list') !== 0 && s.rest) found.add(s.rest);
+      latest = e;
+    }
+    bumpStat('found', found.size);
+    bumpStat('captured', captured);
+    bumpStat('flagged', flagged);
+    var prevMockups = rsPrev.mockups;
+    bumpStat('mockups', mockups);
+    if (mockups >= 1) syncReview(mockups, mockups > prevMockups && prevMockups !== -1);
+
+    // now line (animated swap when changed)
+    if (latest) {
+      var s2 = rsSplit(latest.line);
+      var key = s2.head + '|' + s2.rest;
+      if (key !== rsPrev.now) {
+        var box = document.getElementById('rs-now');
+        if (box) box.classList.add('is-swapping');
+        setTimeout(function () {
+          nowLine.textContent = '';
+          var v = document.createElement('span'); v.className = 'verb'; v.textContent = s2.head;
+          var t = document.createElement('span'); t.className = 'target'; t.textContent = s2.rest;
+          nowLine.appendChild(v); nowLine.appendChild(t);
+          if (box) box.classList.remove('is-swapping');
+        }, 160);
+        rsPrev.now = key;
+      }
+    }
+
+    // feed: last 4 events newest-first, animate only newly-appended rows
+    var list = document.getElementById('rs-feed-list');
+    if (list) {
+      list.innerHTML = '';
+      var slice = LOG.slice(-4).reverse();
+      slice.forEach(function (e, idx) {
+        var s3 = rsSplit(e.line);
+        var row = document.createElement('div'); row.className = 'rs-feed__row';
+        // only animate the freshest row to avoid re-staggering existing rows
+        if (idx !== 0) row.style.animation = 'none';
+        var ts = document.createElement('span'); ts.className = 'ts'; ts.textContent = e.ts || '';
+        var sp = document.createElement('span');
+        var b = document.createElement('b'); b.textContent = s3.head;
+        sp.appendChild(b);
+        if (s3.rest) sp.appendChild(document.createTextNode(' · ' + s3.rest));
+        row.appendChild(ts); row.appendChild(sp);
+        list.appendChild(row);
+      });
+      if (!slice.length) {
+        var empty = document.createElement('div'); empty.className = 'rs-feed__row';
+        var ts2 = document.createElement('span'); ts2.className = 'ts'; ts2.textContent = '—';
+        var sp2 = document.createElement('span'); sp2.textContent = 'waiting on first event…';
+        empty.appendChild(ts2); empty.appendChild(sp2);
+        list.appendChild(empty);
+      }
+    }
+  }
+
+  // ── review-ready handoff ────────────────────────────────────
+  // mockups counter just hit ≥ 1. flip the row to moss-green, sync
+  // the visible count, bump the digit, and — if auto-open is armed
+  // *and this is the first mockup* — start a 3-second countdown
+  // before navigating to the approval screen. esc or click cancels.
+  var reviewCdId = null;
+  function syncReview(total, bumped) {
+    var row = document.getElementById('rs-review');
+    var countEl = document.getElementById('rs-review-n');
+    if (!row || !countEl) return;
+    countEl.textContent = total;
+    if (!row.classList.contains('is-ready')) row.classList.add('is-ready');
+    if (bumped) {
+      row.classList.remove('is-bump'); void row.offsetWidth; row.classList.add('is-bump');
+    }
+    var auto = document.getElementById('rs-review-auto');
+    if (total === 1 && auto && auto.checked && !row.classList.contains('is-arming')) armReview();
+  }
+  function armReview() {
+    var row = document.getElementById('rs-review');
+    var btn = document.getElementById('rs-review-btn');
+    var numEl = document.getElementById('rs-review-cd-num');
+    if (!row || !btn) return;
+    row.classList.add('is-arming');
+    var n = 3; if (numEl) numEl.textContent = n;
+    clearInterval(reviewCdId);
+    reviewCdId = setInterval(function () {
+      n -= 1; if (numEl) numEl.textContent = Math.max(0, n);
+      if (n <= 0) { clearInterval(reviewCdId); reviewCdId = null; window.location.href = btn.getAttribute('href'); }
+    }, 1000);
+  }
+  function cancelReview() {
+    var row = document.getElementById('rs-review');
+    if (!row) return;
+    clearInterval(reviewCdId); reviewCdId = null;
+    row.classList.remove('is-arming');
+  }
+  var rsCdEl = document.getElementById('rs-review-cd');
+  if (rsCdEl) rsCdEl.addEventListener('click', cancelReview);
+
+  // log modal
+  var dlg = document.getElementById('veil');
+  var listEl = document.getElementById('log-list');
+  var countEl = document.getElementById('log-count');
+  function renderLog() {
+    if (!LOG.length) {
+      listEl.innerHTML = '<div class="log-empty">no events yet</div>';
+    } else {
+      listEl.innerHTML = '';
+      // newest first in modal
+      for (var i = LOG.length - 1; i >= 0; i--) {
+        var e = LOG[i];
+        var line = document.createElement('div'); line.className = 'log-line';
+        var parts = (e.line || '').split(' · ');
+        var head = parts.shift() || '';
+        var rest = parts.join(' · ');
+        var ts = document.createElement('span'); ts.className = 'ts'; ts.textContent = e.ts || '';
+        var txt = document.createElement('span');
+        var bb = document.createElement('b'); bb.textContent = head;
+        txt.appendChild(bb);
+        if (rest) txt.appendChild(document.createTextNode(' · ' + rest));
+        line.appendChild(ts); line.appendChild(txt);
+        listEl.appendChild(line);
+      }
+    }
+    if (countEl) countEl.textContent = LOG.length;
+  }
+  function openLog() { renderLog(); dlg.showModal(); }
+
+  var tickerBtn = document.getElementById('ticker-btn');
+  if (tickerBtn) tickerBtn.addEventListener('click', openLog);
+
+  var openFromCard = document.getElementById('runstate-open-log');
+  if (openFromCard) openFromCard.addEventListener('click', openLog);
+
+  dlg.addEventListener('click', function (e) {
+    var s = dlg.querySelector('.sheet').getBoundingClientRect();
+    if (e.clientX < s.left || e.clientX > s.right || e.clientY < s.top || e.clientY > s.bottom) dlg.close();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      if (dlg.open) { dlg.close(); return; }
+      var row = document.getElementById('rs-review');
+      if (row && row.classList.contains('is-arming')) cancelReview();
+    }
+  });
+
+  // elapsed timer — keeps every .la-timer in sync (masthead + runstate card)
+  var timers = document.querySelectorAll('.la-timer');
+  var started = {{ run_started_ms or 'null' }};
+  if (timers.length && started) {
+    function tick () {
+      var s = Math.max(0, Math.floor((Date.now() - started) / 1000));
+      var hh = String(Math.floor(s / 3600)).padStart(2, '0');
+      var mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+      var ss = String(s % 60).padStart(2, '0');
+      var v = hh + ':' + mm + ':' + ss;
+      for (var i = 0; i < timers.length; i++) timers[i].textContent = v;
+    }
+    tick(); setInterval(tick, 1000);
+  }
+
+  // initial paint
+  paintRunstate();
+
+  // SSE for live runs
+  {% if workflow_state == 'running' and run_id %}
+  var es = new EventSource('/events/{{ run_id }}');
+  es.addEventListener('ticker', function (ev) {
+    var d = JSON.parse(ev.data);
+    LOG.push(d);
+    if (LOG.length > 220) LOG = LOG.slice(-220);
+    paintLatest();
+    paintRunstate();
+    if (dlg.open) renderLog();
+  });
+  {% endif %}
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Outreach packet — $business_name</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&family=Crimson+Pro:ital,wght@0,300;0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  @page { margin: 0; }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; color: #111; -webkit-print-color-adjust: exact; print-color-adjust: exact; font-family: "Crimson Pro", Georgia, "Times New Roman", serif; font-feature-settings: "liga", "calt", "kern"; }
+
+  /* Render modes — Python toggles a class on <html> per PDF pass. */
+  html.render-letter .mockup-page { display: none; }
+  html.render-mockup .address-page,
+  html.render-mockup .letter-page { display: none; }
+
+  .sheet { page-break-after: always; break-after: page; }
+  .sheet:last-child { page-break-after: auto; break-after: auto; }
+
+  /* ── Page 1 — Address (8.5 × 11, no @page margin) ────────── */
+  .address-page { width: 8.5in; height: 11in; position: relative; }
+  .address-block {
+    position: absolute;
+    top: 2.25in;
+    right: 0.875in;
+    width: 3.5in;
+    font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+    font-size: 11.5pt;
+    line-height: 1.45;
+    letter-spacing: 0.005em;
+    color: #000;
+  }
+  .address-block .name { font-weight: 500; }
+
+  /* ── Page 2 — Letter (8.5 × 11, internal padding) ────────── */
+  .letter-page {
+    width: 8.5in;
+    height: 11in;
+    padding: 0.875in 0.875in 0.75in 0.875in;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .return-address {
+    font-family: "Inter", "Helvetica Neue", Arial, sans-serif;
+    font-size: 9pt;
+    line-height: 1.45;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #555;
+    margin-bottom: 0.32in;
+  }
+  .letterhead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-bottom: 0.32in;
+    border-bottom: 0.5pt solid #111;
+    margin-bottom: 0.55in;
+  }
+  .letterhead .mark {
+    font-family: "Fraunces", "Times New Roman", serif;
+    font-weight: 400;
+    font-variation-settings: "opsz" 144;
+    font-size: 21pt;
+    letter-spacing: -0.012em;
+    line-height: 1;
+  }
+  .letterhead .meta {
+    font-family: "JetBrains Mono", "Courier New", monospace;
+    font-size: 8pt;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #555;
+  }
+
+  .salutation {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 400;
+    font-variation-settings: "opsz" 72;
+    font-size: 19pt;
+    letter-spacing: -0.01em;
+    margin: 0 0 0.3in;
+    color: #111;
+  }
+
+  .body p {
+    font-size: 12pt;
+    line-height: 1.62;
+    margin: 0 0 0.16in;
+    color: #1a1a1a;
+    text-align: left;
+    hyphens: auto;
+    orphans: 2;
+    widows: 2;
+  }
+  .body em.business {
+    font-style: italic;
+    font-family: "Fraunces", Georgia, serif;
+    font-variation-settings: "opsz" 12;
+    font-weight: 400;
+  }
+
+  .signoff {
+    margin-top: 0.4in;
+    font-size: 12pt;
+    line-height: 1.55;
+  }
+  .signoff .closing { margin-bottom: 0.18in; color: #1a1a1a; }
+  .signoff .name {
+    font-family: "Fraunces", Georgia, serif;
+    font-variation-settings: "opsz" 48;
+    font-size: 15pt;
+    color: #111;
+  }
+  .signoff .contact {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 8pt;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #555;
+    margin-top: 0.06in;
+  }
+
+  /* ── Page 3 — Mockup (page sized to image via page.pdf()) ── */
+  .mockup-page { width: 100%; height: 100vh; margin: 0; padding: 0; overflow: hidden; }
+  .mockup-page img { display: block; width: 100%; height: 100%; object-fit: cover; }
+</style>
+</head>
+<body>
+
+  <!-- Page 1 — Recipient address, positioned for #10 window envelope -->
+  <section class="sheet address-page">
+    <div class="address-block">
+      <div class="name">$business_name</div>
+      <div class="line">$business_street</div>
+      <div class="line">$business_city_state_zip</div>
+    </div>
+  </section>
+
+  <!-- Page 2 — Letter -->
+  <section class="sheet letter-page">
+    $agency_return_address_block
+    <header class="letterhead">
+      <div class="mark">$agency_name</div>
+      <div class="meta">$letter_date</div>
+    </header>
+
+    <h1 class="salutation">Hi there,</h1>
+
+    <div class="body">
+      <p>I came across <em class="business">$business_name</em> while looking through small businesses in $city_only. Rather than tell you in abstract terms what a fresh website could look like for you, I built you one. You'll find it on the next page.</p>
+
+      <p>It took me an afternoon. The real version &mdash; built, hosted, and yours &mdash; is a couple of weeks of work at a price most owners find fair. I take on a small handful of these projects each month, and I'd be glad if <em class="business">$business_name</em> were one of them.</p>
+
+      <p>If the mockup catches your eye, call or write &mdash; $contact_phrase. If it doesn't, you've got a free piece of paper. No follow-up either way.</p>
+    </div>
+
+    <div class="signoff">
+      <div class="closing">Best,</div>
+      <div class="name">$signature_name</div>
+      <div class="contact">$contact_line</div>
+    </div>
+  </section>
+
+  <!-- Page 3 — Mockup. Page size is set per render pass via page.pdf(). -->
+  <section class="sheet mockup-page">
+    <img src="$mockup_src" alt="Redesign mockup for $business_name">
+  </section>
+
+</body>
+</html>

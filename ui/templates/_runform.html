@@ -1,0 +1,554 @@
+{% if workflow_state == 'error' %}
+<div class="err" role="alert">previous run died unexpectedly — start a new one</div>
+{% elif error == 'invalid_input' %}
+<div class="err" role="alert">expected 5-digit zip or 'city, st' (got '{{ submitted_value }}')</div>
+{% elif error == 'run_in_progress' %}
+<div class="err" role="alert">a run is already in progress</div>
+{% endif %}
+
+<style>
+  /* runform — scoped here so the include is self-contained */
+  .err {
+    font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: .18em; text-transform: uppercase;
+    color: var(--warm);
+    border: 1px solid var(--warm);
+    background: rgba(201,82,60,.06);
+    padding: 10px 14px;
+    width: min(540px, 100%);
+    text-align: left;
+  }
+
+  /* ── kickoff form ──────────────────────────────────────────── */
+  form.kickoff {
+    margin: 4px 0 0; padding: 0;
+    width: min(540px, 100%);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    align-items: stretch;
+  }
+  .kickoff__label { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .kickoff__caption {
+    font-family: var(--mono); font-size: 9.5px;
+    letter-spacing: .26em; text-transform: uppercase;
+    color: var(--ink-3); text-align: left;
+  }
+  form.kickoff input[type="text"] {
+    font-family: var(--mono); font-size: 14px;
+    letter-spacing: .04em;
+    padding: 14px 16px;
+    background: #fff;
+    border: 1px solid var(--rule-2);
+    color: var(--ink); outline: none;
+    width: 100%;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  form.kickoff input[type="text"]::placeholder { color: var(--ink-3); }
+  form.kickoff input[type="text"]:focus {
+    border-color: var(--ink);
+    box-shadow: 0 0 0 3px rgba(28,24,20,.08);
+  }
+  form.kickoff input[type="text"]:read-only,
+  form.kickoff.is-submitting input[type="text"] {
+    background: var(--paper-2); color: var(--ink-3);
+  }
+
+  form.kickoff .btn.primary {
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: .16em; text-transform: uppercase;
+    padding: 0 22px; align-self: end;
+    height: 46px;
+    background: var(--ink); color: var(--paper);
+    border: 1px solid var(--ink);
+    cursor: pointer; font-weight: 500;
+    position: relative; overflow: hidden;
+    min-width: 138px;
+    transition: background .15s;
+  }
+  form.kickoff .btn.primary:hover { background: #0d0b09; }
+  form.kickoff .btn.primary:disabled { cursor: default; }
+
+  .btn__label, .btn__pending {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    gap: 6px;
+    transition: opacity .2s, transform .2s;
+  }
+  .btn__pending { opacity: 0; transform: translateY(6px); pointer-events: none; }
+  .btn__pending-text {
+    font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: .16em; text-transform: uppercase;
+    color: var(--paper);
+  }
+  /* quiet shimmer that sweeps across the button while submitting */
+  form.kickoff .btn.primary::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(100deg,
+      transparent 0%, transparent 35%,
+      rgba(242,235,219,.18) 50%,
+      transparent 65%, transparent 100%);
+    transform: translateX(-100%);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .2s;
+  }
+  form.kickoff.is-submitting .btn.primary::after {
+    opacity: 1;
+    animation: btn-shimmer 1.4s cubic-bezier(.55,.05,.45,.95) infinite;
+  }
+  @keyframes btn-shimmer {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  form.kickoff.is-submitting { pointer-events: none; }
+  form.kickoff.is-submitting .btn__label   { opacity: 0; transform: translateY(-6px); }
+  form.kickoff.is-submitting .btn__pending { opacity: 1; transform: translateY(0); }
+
+  /* ── running workbench (replaces the form while running) ──── */
+  .runstate {
+    width: min(620px, 100%);
+    display: flex; flex-direction: column;
+    align-items: stretch; gap: 0;
+    background: #fff;
+    border: 1px solid var(--rule-2);
+    text-align: left;
+    font-family: var(--mono);
+    overflow: hidden;
+  }
+  /* head row: target + live timer */
+  .rs-head {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper-2);
+  }
+  .rs-head .dot {
+    flex-shrink: 0;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--moss);
+    box-shadow: 0 0 0 0 rgba(91,106,58,.55);
+    animation: pulse-moss 1.6s ease-out infinite;
+  }
+  .rs-head__target {
+    flex: 1; min-width: 0;
+    font-size: 11px; font-weight: 600;
+    letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .rs-head__timer {
+    display: flex; align-items: baseline; gap: 8px;
+    flex-shrink: 0;
+  }
+  .rs-head__timer .lbl {
+    font-size: 9px; letter-spacing: .22em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+  .rs-head__timer .val {
+    font-family: var(--serif); font-style: italic;
+    font-size: 18px; font-weight: 500;
+    font-variation-settings: "opsz" 36;
+    color: var(--ink); letter-spacing: -.005em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* current task row */
+  .rs-now {
+    padding: 16px 18px 14px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .rs-now__caption {
+    font-size: 9px; letter-spacing: .26em;
+    text-transform: uppercase; color: var(--ink-3);
+    margin-bottom: 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .rs-now__caption .dots { display: inline-flex; gap: 3px; }
+  .rs-now__caption .dots i {
+    width: 3px; height: 3px; border-radius: 50%;
+    background: var(--ink-3);
+    animation: rs-bounce 1s infinite;
+  }
+  .rs-now__caption .dots i:nth-child(2) { animation-delay: .15s; }
+  .rs-now__caption .dots i:nth-child(3) { animation-delay: .3s; }
+  @keyframes rs-bounce {
+    0%, 100% { transform: translateY(0); opacity: .35; }
+    50%      { transform: translateY(-3px); opacity: 1; }
+  }
+  .rs-now__line {
+    font-size: 13px; color: var(--ink);
+    letter-spacing: .02em;
+    line-height: 1.35;
+    min-height: 1.35em;
+    transition: opacity .2s;
+  }
+  .rs-now__line .verb {
+    font-weight: 600; text-transform: uppercase;
+    letter-spacing: .08em; font-size: 11.5px;
+    color: var(--warm); margin-right: 8px;
+  }
+  .rs-now__line .target { color: var(--ink-2); }
+  .rs-now.is-swapping .rs-now__line { opacity: 0; }
+
+  /* decorative scanner bar */
+  .rs-bar {
+    position: relative;
+    height: 4px; margin-top: 12px;
+    background: var(--paper-3);
+    overflow: hidden;
+  }
+  .rs-bar::before {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg,
+      transparent 0%, transparent 30%,
+      var(--ink) 50%,
+      transparent 70%, transparent 100%);
+    animation: rs-sweep 2.4s cubic-bezier(.6,.05,.4,.95) infinite;
+  }
+  @keyframes rs-sweep {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  /* stats grid */
+  .rs-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-bottom: 1px solid var(--rule);
+  }
+  .rs-stat {
+    padding: 14px 14px 16px;
+    border-right: 1px solid var(--rule);
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .rs-stat:last-child { border-right: 0; }
+  .rs-stat__n {
+    font-family: var(--serif); font-style: normal;
+    font-variation-settings: "opsz" 72;
+    font-size: 28px; font-weight: 400;
+    line-height: 1; color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.01em;
+    transition: color .25s;
+  }
+  .rs-stat.is-tick .rs-stat__n { color: var(--warm); }
+  .rs-stat__lbl {
+    font-size: 8.5px; letter-spacing: .2em;
+    text-transform: uppercase; color: var(--ink-3);
+    line-height: 1.3;
+  }
+
+  /* mini live feed */
+  .rs-feed { padding: 12px 18px 14px; display: flex; flex-direction: column; }
+  .rs-feed__caption {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 9px; letter-spacing: .26em;
+    text-transform: uppercase; color: var(--ink-3);
+    padding-bottom: 8px;
+    margin-bottom: 4px;
+    border-bottom: 1px dashed var(--rule);
+  }
+  .rs-feed__caption button {
+    border: 0; background: transparent; padding: 0; margin: 0;
+    font: inherit; letter-spacing: inherit; text-transform: inherit;
+    color: var(--ink-2); cursor: pointer;
+    border-bottom: 1px solid var(--rule-2);
+  }
+  .rs-feed__caption button:hover { color: var(--ink); border-color: var(--ink); }
+  .rs-feed__list { display: flex; flex-direction: column; min-height: 78px; }
+  .rs-feed__row {
+    display: grid; grid-template-columns: 70px 1fr;
+    gap: 14px; padding: 5px 0;
+    font-size: 11px; letter-spacing: .04em;
+    color: var(--ink-2);
+    border-bottom: 1px dashed rgba(28,24,20,.08);
+    animation: rs-feed-in .4s cubic-bezier(.5,0,.15,1) both;
+  }
+  .rs-feed__row:last-child { border-bottom: 0; }
+  .rs-feed__row .ts { color: var(--ink-3); font-size: 10px; letter-spacing: .1em; }
+  .rs-feed__row b { color: var(--ink); font-weight: 500; letter-spacing: .04em; }
+  @keyframes rs-feed-in {
+    0%   { transform: translateY(-6px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+
+  /* ── review-ready handoff ─────────────────────────────────── */
+  /* dormant (paper-2 / ink-3) until stat-mockups ≥ 1, then flips
+     to a full moss-green CTA that links to the approval screen.
+     Mirrors the .act.primary vocabulary on approval.html. */
+  .rs-review {
+    display: flex; align-items: stretch;
+    border-top: 1px solid var(--rule);
+    background: var(--paper-2);
+    color: var(--ink-3);
+    transition: background .3s ease, color .3s ease;
+    position: relative; overflow: hidden;
+  }
+  .rs-review__meta {
+    flex: 1; min-width: 0;
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 18px;
+    font-size: 10.5px; letter-spacing: .18em;
+    text-transform: uppercase;
+  }
+  .rs-review__pulse {
+    flex-shrink: 0;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--ink-3);
+    transition: background .25s ease, box-shadow .25s ease;
+  }
+  .rs-review__count {
+    flex: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .rs-review__count b {
+    font-family: var(--serif); font-style: italic;
+    font-size: 18px; font-weight: 500;
+    letter-spacing: -.005em; text-transform: none;
+    font-variation-settings: "opsz" 36;
+    color: var(--ink);
+    margin-right: 8px;
+    font-variant-numeric: tabular-nums;
+    transition: color .25s ease;
+  }
+  .rs-review__auto {
+    flex-shrink: 0;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 0 14px 0 12px;
+    border-left: 1px solid var(--rule);
+    font-size: 9px; letter-spacing: .22em;
+    color: var(--ink-3);
+    cursor: pointer; user-select: none;
+    height: 24px;
+    transition: color .25s ease, border-color .25s ease;
+  }
+  .rs-review__auto input { position: absolute; opacity: 0; pointer-events: none; }
+  .rs-review__auto .box {
+    width: 12px; height: 12px;
+    border: 1px solid currentColor;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: background .15s, border-color .15s;
+  }
+  .rs-review__auto .box::after {
+    content: ""; width: 6px; height: 6px;
+    background: currentColor;
+    opacity: 0; transition: opacity .15s;
+  }
+  .rs-review__auto input:checked + .box::after { opacity: 1; }
+  .rs-review__btn {
+    flex-shrink: 0;
+    display: flex; align-items: center; gap: 12px;
+    padding: 0 22px; height: auto;
+    background: transparent;
+    color: var(--ink-3);
+    text-decoration: none;
+    font-family: var(--mono); font-size: 11px; font-weight: 500;
+    letter-spacing: .16em; text-transform: uppercase;
+    border: 0; border-left: 1px solid var(--rule);
+    cursor: not-allowed; pointer-events: none;
+    transition: background .2s, color .2s, padding .2s;
+    position: relative;
+  }
+  .rs-review__btn .arrow {
+    font-family: var(--serif); font-style: normal;
+    font-size: 18px; font-variation-settings: "opsz" 36;
+    transition: transform .2s;
+    line-height: 1;
+  }
+  .rs-review.is-ready { background: var(--moss); color: var(--paper); }
+  .rs-review.is-ready .rs-review__pulse {
+    background: var(--paper);
+    box-shadow: 0 0 0 0 rgba(242,235,219,.55);
+    animation: pulse-paper 1.6s ease-out infinite;
+  }
+  .rs-review.is-ready .rs-review__count,
+  .rs-review.is-ready .rs-review__count b { color: var(--paper); }
+  .rs-review.is-ready .rs-review__auto {
+    color: rgba(242,235,219,.78);
+    border-left-color: rgba(242,235,219,.22);
+  }
+  .rs-review.is-ready .rs-review__auto:hover { color: var(--paper); }
+  .rs-review.is-ready .rs-review__btn {
+    background: rgba(28,24,20,.20);
+    color: var(--paper);
+    cursor: pointer; pointer-events: auto;
+    border-left-color: rgba(242,235,219,.22);
+  }
+  .rs-review.is-ready .rs-review__btn:hover { background: rgba(28,24,20,.36); padding-right: 26px; }
+  .rs-review.is-ready .rs-review__btn:hover .arrow { transform: translateX(4px); }
+  @keyframes pulse-paper {
+    0%   { box-shadow: 0 0 0 0 rgba(242,235,219,.55); }
+    70%  { box-shadow: 0 0 0 8px rgba(242,235,219,0); }
+    100% { box-shadow: 0 0 0 0 rgba(242,235,219,0); }
+  }
+  .rs-review.is-bump .rs-review__count b { animation: count-bump .42s ease; }
+  @keyframes count-bump {
+    0%   { transform: translateY(0); }
+    40%  { transform: translateY(-3px); }
+    100% { transform: translateY(0); }
+  }
+  .rs-review__countdown {
+    position: absolute; inset: 0;
+    display: none;
+    align-items: center; justify-content: space-between;
+    padding: 0 22px;
+    background: var(--ink); color: var(--paper);
+    font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: .18em; text-transform: uppercase;
+    z-index: 2; cursor: pointer;
+  }
+  .rs-review.is-arming .rs-review__countdown { display: flex; }
+  .rs-review__countdown .lead { display: inline-flex; align-items: center; gap: 12px; }
+  .rs-review__countdown .num {
+    font-family: var(--serif); font-style: italic;
+    font-size: 22px; font-variation-settings: "opsz" 36;
+    color: var(--paper); letter-spacing: -.005em;
+    text-transform: none; line-height: 1;
+    font-variant-numeric: tabular-nums;
+    min-width: .9em; display: inline-block;
+  }
+  .rs-review__countdown .cancel { font-size: 9px; letter-spacing: .22em; color: rgba(242,235,219,.7); }
+  .rs-review__countdown .cancel b {
+    color: var(--paper); background: rgba(242,235,219,.14);
+    padding: 3px 7px; margin-right: 6px; font-weight: 500;
+  }
+  .rs-review__countdown .bar {
+    position: absolute; left: 0; bottom: 0; height: 2px; width: 100%;
+    background: var(--paper);
+    transform-origin: left center;
+    animation: cd-bar 3s linear forwards;
+  }
+  @keyframes cd-bar {
+    from { transform: scaleX(1); }
+    to   { transform: scaleX(0); }
+  }
+
+  @media (max-width: 560px) {
+    form.kickoff { grid-template-columns: 1fr; }
+    form.kickoff .btn.primary { height: 48px; align-self: stretch; }
+    .rs-stats { grid-template-columns: repeat(2, 1fr); }
+    .rs-stat:nth-child(2) { border-right: 0; }
+    .rs-stat:nth-child(1), .rs-stat:nth-child(2) { border-bottom: 1px solid var(--rule); }
+  }
+</style>
+
+{% if workflow_state == 'running' %}
+  <div class="runstate" aria-live="polite">
+    <div class="rs-head">
+      <span class="dot"></span>
+      <span class="rs-head__target">scanning {{ source_label }}</span>
+      <span class="rs-head__timer">
+        <span class="lbl">elapsed</span>
+        <span class="val la-timer" id="rs-timer">{{ elapsed or '00:00:00' }}</span>
+      </span>
+    </div>
+
+    <div class="rs-now" id="rs-now">
+      <div class="rs-now__caption">
+        <span>now</span>
+        <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+      </div>
+      <div class="rs-now__line" id="rs-now-line">
+        {% if ticker_seed %}
+          {% set _parts = ticker_seed[0].line.split(' · ') %}
+          <span class="verb">{{ _parts[0] }}</span><span class="target">{% if _parts|length > 1 %}{{ ' · '.join(_parts[1:]) }}{% endif %}</span>
+        {% else %}
+          <span class="verb">spinning up</span><span class="target">warming the pipeline</span>
+        {% endif %}
+      </div>
+      <div class="rs-bar" aria-hidden="true"></div>
+    </div>
+
+    <div class="rs-stats">
+      <div class="rs-stat" data-stat="found">
+        <span class="rs-stat__n" id="stat-found">0</span>
+        <span class="rs-stat__lbl">businesses<br/>found</span>
+      </div>
+      <div class="rs-stat" data-stat="captured">
+        <span class="rs-stat__n" id="stat-captured">0</span>
+        <span class="rs-stat__lbl">screenshots<br/>captured</span>
+      </div>
+      <div class="rs-stat" data-stat="flagged">
+        <span class="rs-stat__n" id="stat-flagged">0</span>
+        <span class="rs-stat__lbl">flagged for<br/>redesign</span>
+      </div>
+      <div class="rs-stat" data-stat="mockups">
+        <span class="rs-stat__n" id="stat-mockups">0</span>
+        <span class="rs-stat__lbl">mockups<br/>ready</span>
+      </div>
+    </div>
+
+    <div class="rs-feed">
+      <div class="rs-feed__caption">
+        <span>recent activity</span>
+        <button type="button" id="runstate-open-log">open full log →</button>
+      </div>
+      <div class="rs-feed__list" id="rs-feed-list">
+        {% if not ticker_seed %}
+          <div class="rs-feed__row"><span class="ts">—</span><span>waiting on first event…</span></div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="rs-review" id="rs-review">
+      <div class="rs-review__meta">
+        <span class="rs-review__pulse" aria-hidden="true"></span>
+        <span class="rs-review__count"><b id="rs-review-n">0</b> ready to review</span>
+        <label class="rs-review__auto" title="auto-open the first mockup when it is ready">
+          <input type="checkbox" id="rs-review-auto" />
+          <span class="box" aria-hidden="true"></span>
+          <span>auto-open</span>
+        </label>
+      </div>
+      <a class="rs-review__btn" href="/" id="rs-review-btn">
+        <span>Review now</span>
+        <span class="arrow" aria-hidden="true">→</span>
+      </a>
+      <div class="rs-review__countdown" id="rs-review-cd" role="button" tabindex="0" aria-label="cancel auto-open">
+        <span class="lead">
+          <span>opening review in</span>
+          <span class="num" id="rs-review-cd-num">3</span>
+        </span>
+        <span class="cancel"><b>esc</b> tap to cancel</span>
+        <span class="bar" aria-hidden="true"></span>
+      </div>
+    </div>
+  </div>
+{% else %}
+  <form class="kickoff" method="post" action="/runs" data-runform>
+    <label class="kickoff__label" for="kickoff-input">
+      <span class="kickoff__caption">enter a zip or city to begin</span>
+      <input id="kickoff-input" type="text" name="location" required
+             autocomplete="off" spellcheck="false"
+             pattern="(\d{5})|([A-Za-z .'\-]+,\s*[A-Za-z]{2})"
+             placeholder="78704  ·  austin, tx"
+             value="{{ submitted_value or '' }}" />
+    </label>
+    <button class="btn primary" type="submit" data-runform-submit>
+      <span class="btn__label">start run</span>
+      <span class="btn__pending" aria-hidden="true">
+        <span class="btn__pending-text">warming up</span>
+      </span>
+    </button>
+  </form>
+
+  <script>
+  (function () {
+    var form = document.querySelector('[data-runform]');
+    if (!form) return;
+    form.addEventListener('submit', function () {
+      // Server takes 2-5s to register the run before it redirects.
+      // Lock the form into a pending state so the click feels acknowledged.
+      form.classList.add('is-submitting');
+      var btn = form.querySelector('[data-runform-submit]');
+      var input = form.querySelector('input[name="location"]');
+      if (btn) btn.disabled = true;
+      if (input) input.readOnly = true;
+    });
+  })();
+  </script>
+{% endif %}
